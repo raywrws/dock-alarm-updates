@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1b24">
+<title>Dock Alarm</title>
+<style>
+:root{--bg:#0d1b24;--card:#14293a;--line:#24405a;--ink:#e8f1f6;--dim:#8fa9bb;--good:#2ecc71;--bad:#ff4d4f;--warn:#f5b041;--accent:#4fc1e9}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px max(4vw,14px);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:22px;margin:0;font-weight:700}
+#fw{color:var(--dim);font-size:14px}
+#conn{margin-left:auto;font-size:14px;display:flex;align-items:center;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--dim);display:inline-block}
+main{padding:16px max(4vw,14px) 40px;max-width:1100px;margin:0 auto;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+#big{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:20px}
+#state{font-size:clamp(30px,7vw,52px);font-weight:800;letter-spacing:.5px;line-height:1}
+#since{color:var(--dim);font-size:14px;margin-top:6px}
+.trig{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.trig{animation:none}}
+#temps{display:flex;gap:22px}
+.t b{display:block;font-size:30px;font-weight:700}.t span{color:var(--dim);font-size:13px}
+#doors{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.door{border-radius:12px;padding:14px;border:1px solid var(--line);background:#10222f}
+.door b{display:block;font-size:20px;margin-top:4px}
+.door span{color:var(--dim);font-size:14px}
+.g{color:var(--good)}.r{color:var(--bad)}.w{color:var(--warn)}
+.door.r{border-color:var(--bad);background:#3a1418}.door.w{border-color:var(--warn)}
+#btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:12px}
+button{font:inherit;font-weight:600;color:var(--ink);background:#1d3a52;border:1px solid var(--line);border-radius:10px;min-height:48px;padding:8px 12px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.arm{background:#145a32}button.dis{background:#7d5a12}button.dang{background:#6e1d22}
+button:disabled{opacity:.45}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input{font:inherit;font-size:16px;color:var(--ink);background:#0b1720;border:1px solid var(--line);border-radius:10px;min-height:46px;padding:8px 12px;width:100%}
+label{color:var(--dim);font-size:14px}
+#pin{max-width:160px}
+#msg{min-height:22px;margin-top:10px;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{color:var(--dim);width:34%}
+#log{font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0}
+h2{font-size:17px;margin:0 0 10px}
+details summary{cursor:pointer;color:var(--accent);font-weight:600;min-height:32px}
+.hide{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+small{color:var(--dim)}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="name">Dock Alarm</h1><span id="fw"></span>
+  <div id="conn"><span class="dot" id="cdot"></span><span id="ctext">connecting...</span></div>
+</header>
+<main>
+  <section class="card hide" id="setup">
+    <h2>Connect this device to your Dock Alarm</h2>
+    <p><small>Enter the remote access key. On the alarm's USB terminal type <b>remote</b> to see it, or open the alarm's own page on the lake house Wi-Fi (http://dockalarm.local) and tap <i>Set up remote access</i>.</small></p>
+    <div class="grid2">
+      <div><label for="skey">Remote access key</label><input id="skey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx"></div>
+      <div><label for="shost">Server</label><input id="shost" value="broker.emqx.io" autocapitalize="off"></div>
+      <div><label for="sport">Secure WebSocket port</label><input id="sport" value="8084" inputmode="numeric"></div>
+      <div><label for="suser">Server user (if any)</label><input id="suser" autocapitalize="off"></div>
+      <div><label for="spass">Server password (if any)</label><input id="spass" type="password"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="ssave">Save and connect</button><span id="smsg"></span></div>
+  </section>
+
+  <section class="card" id="big">
+    <div><div id="state">—</div><div id="since">waiting for the alarm...</div></div>
+    <div id="temps">
+      <div class="t"><span>Water</span><b id="water">—</b></div>
+      <div class="t"><span>Air</span><b id="air">—</b></div>
+    </div>
+  </section>
+
+  <section id="doors"></section>
+
+  <section class="card">
+    <h2>Control</h2>
+    <div class="row">
+      <div><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off"></div>
+      <label class="row" style="margin-top:20px"><input type="checkbox" id="rem" style="width:22px;min-height:22px"> remember on this device</label>
+    </div>
+    <div id="btns">
+      <button class="arm" data-c="arm">Arm</button>
+      <button class="dis" data-c="disarm">Disarm</button>
+      <button data-c="stop">Stop sound</button>
+      <button data-c="test">Send test alert</button>
+      <button data-c="update">Check for update</button>
+      <button class="dang" data-c="reboot">Reboot</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section class="card">
+    <details open><summary>Details</summary><table id="rows"></table></details>
+  </section>
+
+  <section class="card">
+    <h2>Event log</h2>
+    <pre id="log">—</pre>
+  </section>
+
+  <section class="card hide" id="remote">
+    <h2>Set up remote access</h2>
+    <p><small>Use this once on each tablet or phone, while on the lake house Wi-Fi. Enter the PIN above, then tap the button. It opens the internet version of this page and saves the key on this device.</small></p>
+    <button id="rbtn">Set up remote access</button> <span id="rmsg"></span>
+  </section>
+
+  <section class="card hide" id="cloudcfg">
+    <details><summary>Connection settings</summary>
+      <p><small>Server <span id="chost"></span>. Change the key or server:</small></p>
+      <button id="reset">Change key / server</button>
+    </details>
+  </section>
+</main>
+<script>
+{
+const $ = id => document.getElementById(id);
+const LOCAL = location.protocol === 'http:' && !!location.host;
+const CLOUD_URL = 'https://raywrws.github.io/dock-alarm-updates/';
+const enc = new TextEncoder(), dec = new TextDecoder();
+let lastState = null, lastStateAt = 0, online = null, logSeq = 0, K = null, client = null, base = '', pending = {};
+
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch(e){} }
+};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const COLOR = ['', 'g', 'r', 'w'];
+
+function setConn(color, text){ $('cdot').style.background = color; $('ctext').textContent = text; }
+function say(t, cls){ const m = $('msg'); m.textContent = t; m.className = cls || ''; }
+
+// ---------- rendering ----------
+function render(s){
+  lastState = s; lastStateAt = Date.now();
+  $('name').textContent = s.n || 'Dock Alarm';
+  document.title = s.n || 'Dock Alarm';
+  $('fw').textContent = 'v' + s.v;
+  const st = $('state');
+  if (s.g) { st.textContent = 'TRIGGERED'; st.className = 'r trig'; }
+  else if (s.a) { st.textContent = 'ARMED'; st.className = 'g'; }
+  else { st.textContent = 'Disarmed'; st.className = 'w'; }
+  $('water').textContent = s.wt || '—';
+  $('air').textContent = s.at || '—';
+  const rows = s.r || [];
+  $('doors').innerHTML = rows.filter(r => r[3] >= 0 && r[3] <= 3).map(r =>
+    '<div class="door ' + (r[2] === 2 ? 'r' : r[2] === 3 ? 'w' : '') + '"><span>' + esc(r[0]) + '</span><b class="' +
+    COLOR[r[2]] + '">' + esc(r[1]) + '</b></div>').join('');
+  $('rows').innerHTML = rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td class="' + COLOR[r[2]] + '">' + esc(r[1]) + '</td></tr>').join('') +
+    '<tr><td>Board time</td><td>' + esc(s.t) + '  (up ' + esc(s.u) + ')</td></tr>' +
+    '<tr><td>Free memory</td><td>' + esc(s.h) + ' KB' + (s.mb != null ? ' (largest block ' + esc(s.mb) + ' KB)' : '') + '</td></tr>' +
+    (s.sk ? '<tr><td>Spare stack</td><td>' + esc(s.sk) + ' bytes</td></tr>' : '');
+  tick();
+}
+function renderLog(L){
+  if (!L || !L.l) return;
+  logSeq = L.q;
+  const box = $('log'), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
+  box.textContent = L.l.map(x => x[1]).join('\n') || '(nothing yet)';
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+function tick(){
+  if (!lastStateAt) return;
+  const age = Math.round((Date.now() - lastStateAt) / 1000);
+  let t = 'Updated ' + (age < 3 ? 'just now' : age + ' s ago');
+  if (lastState && lastState.t) t += ' · board time ' + lastState.t;
+  if (online === false) t = 'Alarm is OFFLINE (no internet at the lake?) · last report ' + (lastState ? lastState.t : '?');
+  $('since').textContent = t;
+}
+setInterval(tick, 1000);
+
+// ---------- PIN ----------
+const savedPin = store.get('dock_pin');
+if (savedPin) { $('pin').value = savedPin; $('rem').checked = true; }
+function pinValue(){
+  const p = $('pin').value.trim();
+  if ($('rem').checked) store.set('dock_pin', p); else store.set('dock_pin', null);
+  return p;
+}
+$('rem').addEventListener('change', pinValue);
+
+const NAMES = {arm:'Arm', disarm:'Disarm', stop:'Stop sound', test:'Test alert', update:'Update check', reboot:'Reboot'};
+let rebootArmed = 0;
+document.querySelectorAll('#btns button').forEach(b => b.addEventListener('click', async () => {
+  const c = b.dataset.c, p = pinValue();
+  if (!p) { say('Enter the PIN first.', 'w'); $('pin').focus(); return; }
+  if (c === 'reboot' && Date.now() - rebootArmed > 4000) { rebootArmed = Date.now(); say('Tap Reboot again to confirm.', 'w'); return; }
+  say('Sending ' + NAMES[c] + '...');
+  try { const r = await sendCmd(c, p); say(r.m || (r.ok ? 'Done' : 'Failed'), r.ok ? 'g' : 'r'); }
+  catch(e){ say('Could not send: ' + e.message, 'r'); }
+}));
+
+// ---------- LOCAL mode (page served by the alarm itself) ----------
+async function localPoll(){
+  try {
+    const r = await fetch('/api/state', {cache:'no-store'});
+    render(await r.json());
+    setConn('var(--good)', 'Local · ' + location.host);
+    online = true;
+  } catch(e){ setConn('var(--bad)', 'Not reachable'); }
+}
+async function localLog(){
+  try { const r = await fetch('/api/log', {cache:'no-store'}); renderLog(await r.json()); } catch(e){}
+}
+async function localCmd(c, p){
+  const r = await fetch('/api/cmd', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'c=' + encodeURIComponent(c) + '&p=' + encodeURIComponent(p)});
+  return r.json();
+}
+
+// ---------- crypto (same as dock_crypto.h on the board) ----------
+async function hmac(keyBytes, data){
+  const k = await crypto.subtle.importKey('raw', keyBytes, {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', k, data));
+}
+const hexToBytes = h => { h = h.replace(/[^0-9a-f]/gi, ''); const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; };
+const bytesToHex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+function b64e(b){ let s = ''; for (const x of b) s += String.fromCharCode(x); return btoa(s); }
+function b64d(s){ const t = atob(s); const b = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i); return b; }
+async function deriveKeys(key){
+  return {enc: await hmac(key, enc.encode('enc')), mac: await hmac(key, enc.encode('mac')),
+          topic: bytesToHex((await hmac(key, enc.encode('topic'))).slice(0, 8))};
+}
+async function xorStream(kEnc, iv, data){
+  const out = new Uint8Array(data), blk = new Uint8Array(16); blk.set(iv, 0);
+  for (let i = 0; i * 32 < out.length; i++) {
+    blk[12] = i >>> 24; blk[13] = (i >>> 16) & 255; blk[14] = (i >>> 8) & 255; blk[15] = i & 255;
+    const ks = await hmac(kEnc, blk);
+    for (let j = 0; j < 32 && i * 32 + j < out.length; j++) out[i * 32 + j] ^= ks[j];
+  }
+  return out;
+}
+async function seal(text){
+  const iv = crypto.getRandomValues(new Uint8Array(12)), ct = await xorStream(K.enc, iv, enc.encode(text));
+  const body = new Uint8Array(12 + ct.length); body.set(iv, 0); body.set(ct, 12);
+  const tag = (await hmac(K.mac, body)).slice(0, 16), all = new Uint8Array(body.length + 16);
+  all.set(body, 0); all.set(tag, body.length);
+  return b64e(all);
+}
+async function unseal(b64){
+  let all; try { all = b64d(b64.trim()); } catch(e){ return null; }
+  if (all.length < 28) return null;
+  const body = all.slice(0, all.length - 16), tag = all.slice(all.length - 16);
+  const t = (await hmac(K.mac, body)).slice(0, 16);
+  let d = 0; for (let i = 0; i < 16; i++) d |= t[i] ^ tag[i];
+  if (d) return null;
+  return dec.decode(await xorStream(K.enc, body.slice(0, 12), body.slice(12)));
+}
+
+// ---------- CLOUD mode (this page on the internet, talking MQTT) ----------
+function cloudCfg(){
+  return {k: store.get('dock_key') || '', h: store.get('dock_host') || 'broker.emqx.io',
+          w: store.get('dock_wss') || '8084', u: store.get('dock_user') || '', p: store.get('dock_pass') || ''};
+}
+function showSetup(msg){
+  const c = cloudCfg();
+  $('skey').value = c.k; $('shost').value = c.h; $('sport').value = c.w; $('suser').value = c.u; $('spass').value = c.p;
+  $('setup').classList.remove('hide'); $('smsg').textContent = msg || '';
+  setConn('var(--dim)', 'not set up');
+}
+$('ssave').addEventListener('click', () => {
+  const k = $('skey').value.replace(/[^0-9a-f]/gi, '').toLowerCase();
+  if (k.length !== 32) { $('smsg').textContent = 'The key should be 32 letters/digits (0-9, a-f).'; return; }
+  store.set('dock_key', k); store.set('dock_host', $('shost').value.trim() || 'broker.emqx.io');
+  store.set('dock_wss', $('sport').value.trim() || '8084'); store.set('dock_user', $('suser').value.trim() || null);
+  store.set('dock_pass', $('spass').value || null);
+  $('setup').classList.add('hide');
+  cloudStart();
+});
+$('reset').addEventListener('click', () => { if (client) try { client.disconnect(); } catch(e){} showSetup(); });
+
+function loadPaho(){
+  return new Promise((ok, bad) => {
+    if (window.Paho) return ok();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js';
+    s.onload = ok; s.onerror = () => bad(new Error('could not load the MQTT library'));
+    document.head.appendChild(s);
+  });
+}
+async function cloudStart(){
+  const c = cloudCfg();
+  if (c.k.length !== 32) return showSetup();
+  if (!window.crypto || !crypto.subtle) return showSetup('This browser needs https for encryption.');
+  K = await deriveKeys(hexToBytes(c.k));
+  base = 'dockalarm/' + K.topic;
+  $('cloudcfg').classList.remove('hide'); $('chost').textContent = c.h + ':' + c.w;
+  try { await loadPaho(); } catch(e){ setConn('var(--bad)', e.message); return; }
+  connectMqtt(c);
+}
+let retry = 2000;
+function connectMqtt(c){
+  setConn('var(--warn)', 'connecting to ' + c.h + '...');
+  client = new Paho.MQTT.Client(c.h, Number(c.w), '/mqtt', 'dockpage-' + Math.random().toString(16).slice(2, 10));
+  client.onConnectionLost = () => { setConn('var(--bad)', 'connection lost - retrying'); setTimeout(() => connectMqtt(c), retry); retry = Math.min(retry * 2, 30000); };
+  client.onMessageArrived = onMqtt;
+  const opt = {useSSL:true, timeout:10, keepAliveInterval:30, cleanSession:true,
+    onSuccess: () => {
+      retry = 2000;
+      ['state', 'log', 'online', 'resp'].forEach(t => client.subscribe(base + '/' + t));
+      setConn('var(--warn)', 'connected · waiting for the alarm');
+      hello();
+    },
+    onFailure: e => { setConn('var(--bad)', 'cannot reach server (' + (e.errorMessage || 'error') + ')'); setTimeout(() => connectMqtt(c), retry); retry = Math.min(retry * 2, 30000); }};
+  if (c.u) opt.userName = c.u;
+  if (c.p) opt.password = c.p;
+  client.connect(opt);
+}
+function hello(){
+  if (!client || !client.isConnected() || document.visibilityState === 'hidden') return;
+  const m = new Paho.MQTT.Message('1'); m.destinationName = base + '/hello'; client.send(m);
+}
+setInterval(hello, 25000);
+document.addEventListener('visibilitychange', hello);
+async function onMqtt(m){
+  const t = m.destinationName.slice(base.length + 1);
+  if (t === 'online') {
+    online = m.payloadString === '1';
+    setConn(online ? 'var(--good)' : 'var(--bad)', online ? 'Online · via internet' : 'Alarm offline');
+    tick();
+    return;
+  }
+  const txt = await unseal(m.payloadString);
+  if (txt == null) { setConn('var(--bad)', 'wrong key? (cannot read messages)'); return; }
+  let j; try { j = JSON.parse(txt); } catch(e){ return; }
+  if (t === 'state') {
+    if (!m.retained) online = true;            // a live report: the alarm is online whatever 'online' said
+    render(j);
+    if (online !== false) setConn('var(--good)', 'Online · via internet');
+  }
+  else if (t === 'log') renderLog(j);
+  else if (t === 'resp' && pending[j.n]) { pending[j.n](j); delete pending[j.n]; }
+}
+async function cloudCmd(c, p){
+  if (!client || !client.isConnected()) throw new Error('not connected');
+  const n = bytesToHex(crypto.getRandomValues(new Uint8Array(6)));
+  const msg = new Paho.MQTT.Message(await seal(JSON.stringify({c, p, t: Math.floor(Date.now() / 1000), n})));
+  msg.destinationName = base + '/cmd';
+  return new Promise((ok, bad) => {
+    const timer = setTimeout(() => { delete pending[n]; bad(new Error('no answer from the alarm (offline?)')); }, 15000);
+    pending[n] = r => { clearTimeout(timer); ok(r); };
+    client.send(msg);
+  });
+}
+async function sendCmd(c, p){ return LOCAL ? localCmd(c, p) : cloudCmd(c, p); }
+
+// ---------- start ----------
+if (LOCAL) {
+  $('remote').classList.remove('hide');
+  $('rbtn').addEventListener('click', async () => {
+    const p = pinValue();
+    if (!p) { $('rmsg').textContent = 'Enter the PIN in the Control box first.'; return; }
+    try {
+      const r = await (await fetch('/api/remote', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'p=' + encodeURIComponent(p)})).json();
+      if (!r.ok) { $('rmsg').textContent = r.m || 'Refused'; return; }
+      location.href = (r.url || CLOUD_URL) + '#k=' + r.k + '&h=' + encodeURIComponent(r.h) + '&w=' + r.w;
+    } catch(e){ $('rmsg').textContent = 'Failed: ' + e.message; }
+  });
+  localPoll(); localLog();
+  setInterval(localPoll, 3000);
+  setInterval(localLog, 5000);
+} else {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('k')) {
+    store.set('dock_key', h.get('k').toLowerCase());
+    if (h.get('h')) store.set('dock_host', h.get('h'));
+    if (h.get('w')) store.set('dock_wss', h.get('w'));
+    history.replaceState(null, '', location.pathname);
+  }
+  cloudStart();
+}
+}
+</script>
+</body>
+</html>
