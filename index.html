@@ -23,7 +23,8 @@ main{padding:16px max(4vw,14px) 40px;max-width:1100px;margin:0 auto;display:grid
 .trig{animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){.trig{animation:none}}
-#temps{display:flex;gap:22px}
+#temps{display:flex;gap:22px;flex:1 1 100%;justify-content:space-between}
+#temps .t:last-child{text-align:right}
 .t b{display:block;font-size:30px;font-weight:700}.t span{color:var(--dim);font-size:13px}
 #doors{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .door{border-radius:12px;padding:14px;border:1px solid var(--line);background:#10222f}
@@ -95,6 +96,7 @@ a{color:var(--accent)}
       <button data-c="test">Send test alert</button>
       <button data-c="update">Check for update</button>
       <button class="dang" data-c="reboot">Reboot</button>
+      <button id="bvbtn" data-c="beaver">Beaver control</button>
     </div>
     <div id="msg"></div>
   </section>
@@ -150,6 +152,7 @@ function render(s){
   else if (s.a) { st.textContent = 'ARMED'; st.className = 'g'; }
   else { st.textContent = 'Disarmed'; st.className = 'w'; }
   $('water').textContent = s.wt || '—';
+  const bv = $('bvbtn'); bv.textContent = 'Beaver control: ' + (s.bv ? 'RUNNING' : 'off'); bv.className = s.bv ? 'dis' : '';
   $('air').textContent = s.at || '—';
   const rows = s.r || [];
   $('doors').innerHTML = rows.filter(r => r[3] >= 0 && r[3] <= 3).map(r =>
@@ -188,7 +191,7 @@ function pinValue(){
 }
 $('rem').addEventListener('change', pinValue);
 
-const NAMES = {arm:'Arm', disarm:'Disarm', stop:'Stop sound', test:'Test alert', update:'Update check', reboot:'Reboot'};
+const NAMES = {arm:'Arm', disarm:'Disarm', stop:'Stop sound', test:'Test alert', update:'Update check', reboot:'Reboot', beaver:'Beaver control'};
 let rebootArmed = 0;
 document.querySelectorAll('#btns button').forEach(b => b.addEventListener('click', async () => {
   const c = b.dataset.c, p = pinValue();
